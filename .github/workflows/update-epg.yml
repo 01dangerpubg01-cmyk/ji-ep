@@ -26,7 +26,16 @@ jobs:
       - name: Dependencies install
         run: pip install requests
 
+      - name: Proxy secret mask pannu
+        run: |
+          # GitHub logs la accidental-a proxy credentials theriyama irukka,
+          # explicit-a mask command kudukurom (double safety, env: oda automatic
+          # masking-ku mela)
+          echo "::add-mask::${{ secrets.JIOTV_PROXY }}"
+
       - name: EPG generate pannu
+        env:
+          JIOTV_PROXY: ${{ secrets.JIOTV_PROXY }}
         run: |
           python3 scripts/jiotv_epg.py \
             --days 2 \
