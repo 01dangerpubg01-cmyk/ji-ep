@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+!/usr/bin/env python3
 """
 JioTV EPG -> XMLTV (.xml) Generator
 ------------------------------------
@@ -161,8 +161,29 @@ def build_xmltv(channels, epg_by_channel, output_path):
             lines.append(f'    <title lang="en">{title}</title>')
             if desc:
                 lines.append(f'    <desc lang="en">{desc}</desc>')
+
+            # Extra details (date, name, episode info if available)
+            episode_title = escape(str(p.get("episodeTitle") or p.get("episodename") or p.get("subtitle") or ""))
+            if episode_title:
+                lines.append(f'    <sub-title lang="en">{episode_title}</sub-title>')
+
+            prog_date = p.get("releaseDate") or p.get("date") or p.get("year")
+            if prog_date:
+                lines.append(f'    <date>{escape(str(prog_date))}</date>')
+
+            cast_name = p.get("cast") or p.get("actors") or p.get("actor")
+            director = p.get("director")
+            if cast_name or director:
+                lines.append('    <credits>')
+                if director:
+                    lines.append(f'      <director>{escape(str(director))}</director>')
+                if cast_name:
+                    lines.append(f'      <actor>{escape(str(cast_name))}</actor>')
+                lines.append('    </credits>')
+
             if category:
                 lines.append(f'    <category lang="en">{escape(str(category))}</category>')
+
             lines.append('  </programme>')
 
     lines.append('</tv>')
