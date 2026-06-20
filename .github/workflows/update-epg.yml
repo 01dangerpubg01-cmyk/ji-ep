@@ -1,0 +1,54 @@
+name: Update JioTV EPG
+
+on:
+  schedule:
+    # Every 6 hours. Cron is in UTC. Adjust as needed.
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}   # "Run workflow" button - manual trigger ku
+
+permissions:
+  contents: write   # repo-la commit pannanum na idhu venum
+
+jobs:
+  update-epg:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Repo checkout
+        uses: actions/checkout@v4
+
+      - name: Python setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Dependencies install
+        run: pip install requests
+
+      - name: EPG generate pannu
+        run: |
+          python3 scripts/jiotv_epg.py \
+            --days 2 \
+            --output epg/jiotv_epg.xml \
+            --gzip \
+            --workers 8
+
+      - name: Changes check pannu
+        id: git_check
+        run: |
+          mkdir -p epg
+          if [ -n "$(git status --porcelain epg/)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push
+        if: steps.git_check.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add epg/
+          git commit -m "chore: auto-update JioTV EPG ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+          git push
