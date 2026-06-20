@@ -20,6 +20,7 @@ NOTE: Idhu purely public/unauthenticated JioTV CDN endpoints mattum use pannudhu
 """
 
 import argparse
+import os
 import sys
 import time
 import gzip
@@ -49,17 +50,35 @@ HEADERS = {
 
 LOGO_BASE = "https://jiotv.catchup.cdn.jio.com/dare_images/shows"
 
+# Proxy support - JIOTV_PROXY env var la irundhu eduthukum.
+# Format: http://user:pass@host:port  (GitHub Secrets la store pannunga, plain text-la engayum podadhinga)
+_PROXY_URL = os.environ.get("JIOTV_PROXY", "").strip()
+PROXIES = {"http": _PROXY_URL, "https": _PROXY_URL} if _PROXY_URL else None
+
+
+def _sanitize_error(exc):
+    """Error message-la proxy URL irundha (credentials sahitham), adha mask pannidu.
+    Idhu GitHub Actions logs la proxy username/password accidental-a print aagama
+    thadukkardhukku."""
+    msg = str(exc)
+    if _PROXY_URL and _PROXY_URL in msg:
+        msg = msg.replace(_PROXY_URL, "[PROXY_HIDDEN]")
+    # "user:pass@" pattern irundha edhu vandhalum mask pannidu (safety net)
+    import re
+    msg = re.sub(r"://[^/@\s]+@", "://[REDACTED]@", msg)
+    return msg
+
 
 def fetch_channels(lang_filter=None, retries=3):
     """JioTV CDN la irundhu full channel list eduthuko."""
     for attempt in range(retries):
         try:
-            resp = requests.get(CHANNEL_LIST_URL, headers=HEADERS, timeout=15)
+            resp = requests.get(CHANNEL_LIST_URL, headers=HEADERS, proxies=PROXIES, timeout=15)
             resp.raise_for_status()
             data = resp.json()
             break
         except Exception as e:
-            print(f"[!] Channel list fetch fail (attempt {attempt+1}/{retries}): {e}")
+            print(f"[!] Channel list fetch fail (attempt {attempt+1}/{retries}): {_sanitize_error(e)}")
             time.sleep(2)
     else:
         print("[X] Channel list eduthukka mudila. Network/CDN issue irukalam.")
@@ -80,13 +99,15 @@ def fetch_epg_for_channel(channel_id, days=2, delay=0.15):
     for offset in range(days):
         url = EPG_URL_TEMPLATE.format(offset=offset, channel_id=channel_id)
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=10)
+            resp = requests.get(url, headers=HEADERS, proxies=PROXIES, timeout=10)
             if resp.status_code != 200:
                 continue
             data = resp.json()
             epg_list = data.get("epg", [])
             all_programmes.extend(epg_list)
         except Exception:
+            # Proxy/connection errors silent-a skip pannrom - credentials accidental-a
+            # print aagama irukka. Eppadiyo retry loop handle pannum.
             pass
         time.sleep(delay)  # JioTV CDN ku rate-limit aagama irukka konjam delay
     return all_programmes
@@ -167,6 +188,7 @@ def main():
     print("=" * 50)
     print("JioTV EPG -> XMLTV Generator")
     print("=" * 50)
+    print(f"[i] Proxy: {'ENABLED (hidden)' if PROXIES else 'disabled'}")
 
     channels = fetch_channels(lang_filter=args.lang)
     if args.limit:
